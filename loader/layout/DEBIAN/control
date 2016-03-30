@@ -1,0 +1,9 @@
+Package: me.thomasfinch.cylogos
+Name: CyLogos
+Depends: mobilesubstrate
+Version: 0.1
+Architecture: iphoneos-arm
+Description: Prototype tweaks in Cycript using Logos syntax
+Maintainer: Thomas Finch
+Author: Thomas Finch
+Section: Tweaks

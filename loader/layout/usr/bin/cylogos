@@ -1,0 +1,172 @@
+#!/usr/bin/python
+import sys, string
+
+def fatalError(message):
+	print 'Error: ' + message
+	exit(1)
+
+def assertValidKeyword(keyword, errorMsg, extraChars=[]):
+	if not all(c in string.ascii_letters+string.digits+''.join(extraChars) for c in keyword):
+		fatalError(errorMsg)
+
+def lineIsHookStart(line):
+	return line[:5].lower() == '%hook'
+
+def lineIsHookEnd(line):
+	return line.lower() == '%end'
+
+def getClassNameFromHook(line):
+	line = line[5:].strip() # remove '%hook'
+
+	if len(line) == 0:
+		fatalError('Missing class name in hook.')
+
+	assertValidKeyword(line, 'Invalid class name in hook: ' + line)
+
+	return line
+
+def processOrig(line, functionArgs, oldMethodName):
+	# No %orig calls to process
+	if '%orig' not in line:
+		return line
+
+	# Process all %orig directives, ignoring them if they're inside string literals
+	inDoubleQuoteString = False
+	inSingleQuoteString = False
+	for index, char in enumerate(line):
+		if char == '"' and line[index-1] != '\\':
+			inDoubleQuoteString = not inDoubleQuoteString
+		elif char == '\'' and line[index-1] != '\\':
+			inSingleQuoteString = not inSingleQuoteString
+
+		# Found a valid %orig not in a string literal, process it
+		if line[index:index+5] == '%orig' and not inDoubleQuoteString and not inSingleQuoteString:
+			# if line[index+6] == '(':
+			# 	line = line # TEMPORARY CHANGE THIS ASDFADSF ASDF ASDF
+			# else:
+
+			origCall = '->call(this)'
+			if len(functionArgs) > 0:
+				origCall = '->call(this, ' + functionArgs + ')'
+			line = line[:index] + oldMethodName + origCall + line[index+5:]
+
+	return line
+
+def parseFunctions(lines):
+	parsedFunctions = []
+
+	# Join lines into one string
+	line = '\n'.join(lines).rstrip()
+
+	while len(line) > 0:
+		# remove 'function'
+		line = line.lstrip()
+		if line[:8].lower() != 'function':
+			fatalError('Only functions are allowed within hooks.')
+		line = line[8:].lstrip()
+
+		# get function name
+		functionName = line[:line.find('(')].strip()
+		assertValidKeyword(functionName, 'Invalid function name: ' + functionName, ['_'])
+		line = line[line.find('('):].lstrip()
+
+		# get arguments
+		arguments = line[1:line.find(')')].strip()
+		assertValidKeyword(arguments, 'Invalid function arguments: ' + arguments, [',', ' '])
+		line = line[line.find(')')+1:].lstrip()
+
+		# get function body
+		if line[0] != '{':
+			fatalError('Missing function body.')
+		bracketDepth = 0
+		functionEndIndex = 0
+		for index, char in enumerate(line):
+			if char == '{':
+				bracketDepth += 1
+			elif char == '}':
+				bracketDepth -= 1
+
+			if bracketDepth == 0:
+				functionEndIndex = index
+				break
+
+		functionBody = line[1:functionEndIndex].strip()
+		line = line[functionEndIndex+1:].lstrip()
+
+		parsedFunctions.append((functionName, arguments, functionBody))
+
+	return parsedFunctions
+
+def processHook(lines):
+	processedHookLines = []
+	className = getClassNameFromHook(lines[0])
+	lines = lines[1:-1] # remove %hook and %end lines
+
+	funcs = parseFunctions(lines)
+
+	for functionTuple in funcs:
+		functionName = functionTuple[0]
+		arguments = functionTuple[1]
+		functionBody = functionTuple[2]
+
+		# Create a variable for the old method implementation
+		oldMethodName = className + '_' + functionName + '_orig'
+		processedHookLines.append('var ' + oldMethodName + ' = {};')
+
+		processedHookLines.append('MS.hookMessage(' + className + ', @selector(' + functionName.replace('_', ':') + '), function(' + arguments + ') {')
+
+		for functionBodyLine in functionBody.split('\n'):
+			processedHookLines.append(processOrig(functionBodyLine, arguments, oldMethodName))
+
+		processedHookLines.append('}, ' + oldMethodName + ')')
+
+	return processedHookLines
+
+def main():
+	if len(sys.argv) < 2:
+		fatalError('Need filename argument.')
+
+	inHook = False
+	processedLines = ['@import com.saurik.substrate.MS', '@import org.cycript.NSLog']
+	hookLines = []
+
+	file = open(sys.argv[1], 'r')
+	for lineNum, line in enumerate(file):
+
+		# Clean up input (strip whitespace, skip empty lines)
+		line = line.strip()
+		if len(line) == 0:
+			continue
+
+		# Handle %hook
+		if lineIsHookStart(line):
+			if not inHook:
+				inHook = True
+			else:
+				fatalError('Cannot nest %hook\'s (line ' + str(lineNum+1) + ').')
+
+		# Process each line
+		if inHook:
+			hookLines.append(line)
+		else:
+			processedLines.append(line)
+
+		# Handle %end
+		if lineIsHookEnd(line):
+			if inHook:
+				inHook = False
+				processedLines += processHook(hookLines)
+				hookLines = []
+			else:
+				fatalError('Found a %end without finding a %hook first (line ' + str(lineNum+1) + ').')
+
+	if inHook:
+		fatalError('Found a %hook without a matching %end.')
+
+	file.close()
+
+	for line in processedLines:
+		print line
+
+if __name__ == "__main__":
+	main()

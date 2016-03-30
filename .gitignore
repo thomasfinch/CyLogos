@@ -1,0 +1,4 @@
+.DS_Store
+loader/debs
+loader/obj
+loader/.theos

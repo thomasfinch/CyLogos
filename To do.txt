@@ -1,0 +1,13 @@
+To Do
+	Add line numbers to all error output in cylogos.py
+	Add support for filters (and apps other than springboard) (no filter = springboard maybe?) (maybe line starting with "###" at the top of the file)
+	Change loader MS filter to load into all processes with UIKit instead of just springboard (once filters are implemented)
+	Test on something more modern than iOS 6
+
+Maybe
+	Add support for C function hooking? (%hookf)
+	Support changes to files/re-hooking without killing the process (maybe not possible)
+	Remove temporary files in destructor in loader?
+	Support for reloading files when they're changed on disk (using file system events) (maybe not the best idea since people save frequently before they're done editing)
+	Add option to show UIAlertView on error syntax/parsing error (for beginners)
+	Rewrite parser in something other than python... (cycript?(lol) bash? perl?(ew))
